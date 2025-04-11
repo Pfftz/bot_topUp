@@ -6,6 +6,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  InteractionType,
 } = require("discord.js");
 const { DisTube } = require("distube");
 const { SpotifyPlugin } = require("@distube/spotify");
@@ -38,6 +42,44 @@ client.on("messageCreate", async (message) => {
 
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift()?.toLowerCase();
+
+  if (command === "help") {
+    const embed = new EmbedBuilder()
+      .setTitle("🎵 Selamat datang di Bot Musik!")
+      .setDescription(
+        "Mau dengerin apa hari ini? Berikut adalah cara menggunakan bot:"
+      )
+      .addFields(
+        {
+          name: "▶ **?play [judul/URL]**",
+          value: "Memutar lagu dari YouTube, Spotify, atau SoundCloud.",
+        },
+        {
+          name: "⏸ **Pause/Resume**",
+          value: "Gunakan tombol untuk menjeda atau melanjutkan lagu.",
+        },
+        { name: "⏹ **Stop**", value: "Menghentikan lagu yang sedang diputar." },
+        {
+          name: "🔁 **Loop**",
+          value: "Mengaktifkan mode loop untuk lagu atau antrian.",
+        }
+      )
+      .setColor("Blue")
+      .setFooter({ text: "Bot Musik - Nikmati harimu dengan musik!" });
+
+    const controls = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("play_song")
+        .setLabel("Putar Lagu")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("help")
+        .setLabel("Bantuan")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return message.channel.send({ embeds: [embed], components: [controls] });
+  }
 
   if (command === "play") {
     const query = args.join(" ");
@@ -89,39 +131,76 @@ distube.on("playSong", async (queue, song) => {
 });
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
+  if (interaction.isButton()) {
+    if (interaction.customId === "play_song") {
+      // Buat modal untuk input judul lagu
+      const modal = new ModalBuilder()
+        .setCustomId("play_song_modal")
+        .setTitle("Putar Lagu");
 
-  const queue = distube.getQueue(interaction.guildId);
-  if (!queue)
-    return interaction.reply({
-      content: "❌ Tidak ada musik yang diputar!",
-      ephemeral: true,
-    });
+      const songInput = new TextInputBuilder()
+        .setCustomId("song_name")
+        .setLabel("Masukkan judul atau URL lagu:")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Contoh: Never Gonna Give You Up")
+        .setRequired(true);
 
-  const id = interaction.customId;
-  switch (id) {
-    case "pause":
-      distube.pause(interaction.guildId);
-      interaction.reply("⏸ Musik dijeda!");
-      break;
-    case "resume":
-      distube.resume(interaction.guildId);
-      interaction.reply("▶ Musik dilanjut!");
-      break;
-    case "stop":
-      distube.stop(interaction.guildId);
-      interaction.reply("⛔ Musik dihentikan!");
-      break;
-    case "loop":
-      let mode = distube.setRepeatMode(
-        interaction.guildId,
-        (queue.repeatMode + 1) % 3
-      );
-      interaction.reply(`🔁 Mode loop: ${["off", "lagu", "antrian"][mode]}`);
-      break;
-    case "love":
-      interaction.reply("❤️ Kamu suka lagu ini juga yaa~");
-      break;
+      const actionRow = new ActionRowBuilder().addComponents(songInput);
+      modal.addComponents(actionRow);
+
+      await interaction.showModal(modal);
+    }
+  } else if (interaction.type === InteractionType.ModalSubmit) {
+    if (interaction.customId === "play_song_modal") {
+      const songName = interaction.fields.getTextInputValue("song_name");
+
+      if (!interaction.member.voice.channel) {
+        return interaction.reply({
+          content: "❌ Masuk ke voice channel dulu dong~",
+          ephemeral: true,
+        });
+      }
+
+      distube.play(interaction.member.voice.channel, songName, {
+        textChannel: interaction.channel,
+        member: interaction.member,
+      });
+
+      await interaction.reply(`🎵 Memutar lagu: **${songName}**`);
+    }
+  } else {
+    const queue = distube.getQueue(interaction.guildId);
+    if (!queue)
+      return interaction.reply({
+        content: "❌ Tidak ada musik yang diputar!",
+        ephemeral: true,
+      });
+
+    const id = interaction.customId;
+    switch (id) {
+      case "pause":
+        distube.pause(interaction.guildId);
+        interaction.reply("⏸ Musik dijeda!");
+        break;
+      case "resume":
+        distube.resume(interaction.guildId);
+        interaction.reply("▶ Musik dilanjut!");
+        break;
+      case "stop":
+        distube.stop(interaction.guildId);
+        interaction.reply("⛔ Musik dihentikan!");
+        break;
+      case "loop":
+        let mode = distube.setRepeatMode(
+          interaction.guildId,
+          (queue.repeatMode + 1) % 3
+        );
+        interaction.reply(`🔁 Mode loop: ${["off", "lagu", "antrian"][mode]}`);
+        break;
+      case "love":
+        interaction.reply("❤️ Kamu suka lagu ini juga yaa~");
+        break;
+    }
   }
 });
 
