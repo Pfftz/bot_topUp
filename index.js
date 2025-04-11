@@ -92,4 +92,4 @@ distube
     queue.textChannel.send(`➕ Ditambahkan ke antrian: **${song.name}**`);
   });
 
-client.login("");
+client.login(process.env.DISCORD_TOKEN);
