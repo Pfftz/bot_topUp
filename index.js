@@ -1,9 +1,11 @@
+require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
 } = require("discord.js");
 const { DisTube } = require("distube");
 const { SpotifyPlugin } = require("@distube/spotify");
@@ -39,30 +41,53 @@ client.on("messageCreate", async (message) => {
 
   if (command === "play") {
     const query = args.join(" ");
-    if (!query) return message.channel.send("🎵 Mau putar lagu apa");
+    if (!query) return message.channel.send("🎵 Mau putar lagu apa?");
 
-    // Membuat tombol kontrol musik
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("skip")
-        .setLabel("⏭ Skip")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("stop")
-        .setLabel("⛔ Stop")
-        .setStyle(ButtonStyle.Danger)
-    );
+    if (!message.member.voice.channel)
+      return message.reply("❌ Masuk ke voice channel dulu dong~");
 
-    // Memutar lagu dan mengirimkan tombol
     distube.play(message.member.voice.channel, query, {
       textChannel: message.channel,
       member: message.member,
     });
-    message.channel.send({ content: "🎶 Kontrol musik:", components: [row] });
   }
 });
 
-// Event listener untuk tombol
+// Embed + tombol ketika lagu diputar
+distube.on("playSong", async (queue, song) => {
+  const embed = new EmbedBuilder()
+    .setTitle("Now playing")
+    .setDescription(`[${song.name}](${song.url})`)
+    .setThumbnail(song.thumbnail)
+    .addFields({ name: "\u200b", value: `\`${song.formattedDuration}\`` })
+    .setColor("Purple");
+
+  const controls = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("pause")
+      .setEmoji("⏸")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("resume")
+      .setEmoji("▶")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("stop")
+      .setEmoji("⏹")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("loop")
+      .setEmoji("🔁")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("love")
+      .setEmoji("❤️")
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  queue.textChannel.send({ embeds: [embed], components: [controls] });
+});
+
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
@@ -73,23 +98,31 @@ client.on("interactionCreate", async (interaction) => {
       ephemeral: true,
     });
 
-  if (interaction.customId === "skip") {
-    distube.skip(interaction.guildId);
-    interaction.reply("⏭ Lagu dilewati!");
-  } else if (interaction.customId === "stop") {
-    distube.stop(interaction.guildId);
-    interaction.reply("⛔ Musik dihentikan!");
+  const id = interaction.customId;
+  switch (id) {
+    case "pause":
+      distube.pause(interaction.guildId);
+      interaction.reply("⏸ Musik dijeda!");
+      break;
+    case "resume":
+      distube.resume(interaction.guildId);
+      interaction.reply("▶ Musik dilanjut!");
+      break;
+    case "stop":
+      distube.stop(interaction.guildId);
+      interaction.reply("⛔ Musik dihentikan!");
+      break;
+    case "loop":
+      let mode = distube.setRepeatMode(
+        interaction.guildId,
+        (queue.repeatMode + 1) % 3
+      );
+      interaction.reply(`🔁 Mode loop: ${["off", "lagu", "antrian"][mode]}`);
+      break;
+    case "love":
+      interaction.reply("❤️ Kamu suka lagu ini juga yaa~");
+      break;
   }
 });
-
-distube
-  .on("playSong", (queue, song) => {
-    queue.textChannel.send(
-      `🎶 Memutar: **${song.name}** - \`${song.formattedDuration}\``
-    );
-  })
-  .on("addSong", (queue, song) => {
-    queue.textChannel.send(`➕ Ditambahkan ke antrian: **${song.name}**`);
-  });
 
 client.login(process.env.DISCORD_TOKEN);
