@@ -65,9 +65,9 @@ client.on("messageCreate", async (message) => {
   // Handle ?info command
   if (command === "info") {
     const embed = new EmbedBuilder()
-      .setTitle("APA KONTOL")
+      .setTitle("APA HITAM")
       .setDescription(
-        "Pake tomboil aja nyet kalo lu males pake prefix ya konntol.\n\n" +
+        "Pake tombol aja nyet kalo lu males pake prefix ya konntol.\n\n" +
           "ini prefixnya kontol:\n" +
           "• `?topup [jumlah]` - apa iya gw harus jelasin satu satu? .\n" +
           "• `?saldo` - ini juga HAH?."
