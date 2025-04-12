@@ -100,69 +100,93 @@ client.once("ready", () => {
   console.log(`Top-Up Bot ON 💰 ${client.user.tag}`);
 });
 
-// Handle message commands
+// Handle message commands and interactions
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.guild) return;
 
   const prefix = "?";
-  if (!message.content.startsWith(prefix)) return;
-
   const args = message.content.slice(prefix.length).trim().split(/ +/);
   const command = args.shift()?.toLowerCase();
 
-  if (command === "topup") {
-    const amount = parseInt(args[0]);
-    if (!amount || isNaN(amount) || amount <= 0) {
-      return message.reply(
-        "❌ Masukkan jumlah top up yang valid! Contoh: `?topup 50000`"
-      );
-    }
-
-    if (amount < 10000) {
-      return message.reply("❌ Minimal top up Rp 10.000");
-    }
-
-    // Tambahkan saldo ke pengguna
-    const newBalance = await updateUserBalance(message.author.id, amount);
-
-    // Kirim konfirmasi ke pengguna
+  // Kirim UI tombol jika pesan hanya berisi prefix
+  if (message.content === prefix) {
     const embed = new EmbedBuilder()
-      .setTitle("💰 Top Up Berhasil!")
+      .setTitle("💰 Selamat datang di Bot Top Up!")
       .setDescription(
-        `<@${
-          message.author.id
-        }> berhasil top up sebesar Rp ${amount.toLocaleString("id-ID")}`
+        "Gunakan tombol di bawah ini untuk top up atau cek saldo."
       )
-      .addFields({
-        name: "Saldo Sekarang",
-        value: `Rp ${newBalance.toLocaleString("id-ID")}`,
-      })
-      .setColor("Green")
-      .setTimestamp();
+      .setColor("Blue");
 
-    message.reply({ embeds: [embed] });
+    const buttons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("topup")
+        .setLabel("Top Up")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("saldo")
+        .setLabel("Cek Saldo")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return message.reply({ embeds: [embed], components: [buttons] });
   }
 
-  if (command === "saldo") {
-    const balance = getUserBalance(message.author.id);
-    const embed = new EmbedBuilder()
-      .setTitle("💰 Informasi Saldo")
-      .setDescription(`<@${message.author.id}>, saldo kamu saat ini adalah:`)
-      .addFields({
-        name: "Saldo",
-        value: `Rp ${balance.toLocaleString("id-ID")}`,
-      })
-      .setColor("Blue")
-      .setTimestamp();
+  // Handle perintah dengan prefix
+  if (message.content.startsWith(prefix)) {
+    if (command === "topup") {
+      const amount = parseInt(args[0]);
+      if (!amount || isNaN(amount) || amount <= 0) {
+        return message.reply(
+          "❌ Masukkan jumlah top up yang valid! Contoh: `?topup 50000`"
+        );
+      }
 
-    message.reply({ embeds: [embed] });
+      if (amount < 10000) {
+        return message.reply("❌ Minimal top up Rp 10.000");
+      }
+
+      // Tambahkan saldo ke pengguna
+      const newBalance = await updateUserBalance(message.author.id, amount);
+
+      // Kirim konfirmasi ke pengguna
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Top Up Berhasil!")
+        .setDescription(
+          `<@${
+            message.author.id
+          }> berhasil top up sebesar Rp ${amount.toLocaleString("id-ID")}`
+        )
+        .addFields({
+          name: "Saldo Sekarang",
+          value: `Rp ${newBalance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Green")
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
+    }
+
+    if (command === "saldo") {
+      const balance = getUserBalance(message.author.id);
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Informasi Saldo")
+        .setDescription(`<@${message.author.id}>, saldo kamu saat ini adalah:`)
+        .addFields({
+          name: "Saldo",
+          value: `Rp ${balance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Blue")
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
+    }
   }
 });
 
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     if (interaction.customId === "topup") {
-      // Create modal for topup amount input
+      // Buat modal untuk input jumlah top up
       const modal = new ModalBuilder()
         .setCustomId("topup_modal")
         .setTitle("Top Up Saldo");
@@ -177,24 +201,24 @@ client.on("interactionCreate", async (interaction) => {
       const actionRow = new ActionRowBuilder().addComponents(amountInput);
       modal.addComponents(actionRow);
 
-      await interaction.showModal(modal);
-    } else if (interaction.customId === "help") {
-      const embed = new EmbedBuilder()
-        .setTitle("💰 Bantuan Top Up Bot")
-        .setDescription("Cara menggunakan bot top up:")
-        .addFields(
-          {
-            name: "💰 **?topup [jumlah]**",
-            value: "Top up saldo kamu dengan jumlah tertentu.",
-          },
-          {
-            name: "💸 **?saldo**",
-            value: "Cek saldo kamu saat ini.",
-          }
-        )
-        .setColor("Blue");
+      return await interaction.showModal(modal);
+    }
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+    if (interaction.customId === "saldo") {
+      const balance = getUserBalance(interaction.user.id);
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Informasi Saldo")
+        .setDescription(
+          `<@${interaction.user.id}>, saldo kamu saat ini adalah:`
+        )
+        .addFields({
+          name: "Saldo",
+          value: `Rp ${balance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Blue")
+        .setTimestamp();
+
+      return await interaction.reply({ embeds: [embed], ephemeral: true });
     }
   } else if (interaction.type === InteractionType.ModalSubmit) {
     if (interaction.customId === "topup_modal") {
@@ -215,66 +239,25 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
-      // Create order ID
-      const orderId = `TOPUP-${interaction.user.id}-${Date.now()}`;
+      // Tambahkan saldo ke pengguna
+      const newBalance = await updateUserBalance(interaction.user.id, amount);
 
-      // Create transaction parameter
-      const parameter = {
-        transaction_details: {
-          order_id: orderId,
-          gross_amount: amount,
-        },
-        credit_card: {
-          secure: true,
-        },
-        customer_details: {
-          first_name: interaction.user.username,
-          email: `${interaction.user.id}@discord.user`,
-        },
-      };
+      // Kirim konfirmasi ke pengguna
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Top Up Berhasil!")
+        .setDescription(
+          `<@${
+            interaction.user.id
+          }> berhasil top up sebesar Rp ${amount.toLocaleString("id-ID")}`
+        )
+        .addFields({
+          name: "Saldo Sekarang",
+          value: `Rp ${newBalance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Green")
+        .setTimestamp();
 
-      try {
-        // Create transaction and get redirect URL
-        const transaction = await snap.createTransaction(parameter);
-        const redirectUrl = transaction.redirect_url;
-
-        // Store pending transaction
-        pendingTransactions[orderId] = {
-          userId: interaction.user.id,
-          channelId: interaction.channel.id,
-          amount: amount,
-        };
-
-        // Create payment embed
-        const embed = new EmbedBuilder()
-          .setTitle("💰 Top Up Saldo")
-          .setDescription(
-            `<@${
-              interaction.user.id
-            }> ingin top up sebesar Rp ${amount.toLocaleString("id-ID")}`
-          )
-          .addFields(
-            { name: "Order ID", value: orderId },
-            {
-              name: "Link Pembayaran",
-              value: `[Klik disini untuk membayar](${redirectUrl})`,
-            }
-          )
-          .setColor("Gold")
-          .setFooter({
-            text: "Link pembayaran berlaku selama 24 jam",
-          })
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [embed] });
-      } catch (error) {
-        console.error("Error creating transaction:", error);
-        await interaction.reply({
-          content:
-            "❌ Terjadi kesalahan saat membuat transaksi. Silakan coba lagi nanti.",
-          ephemeral: true,
-        });
-      }
+      return await interaction.reply({ embeds: [embed] });
     }
   }
 });
