@@ -10,6 +10,8 @@ const {
   TextInputBuilder,
   TextInputStyle,
   InteractionType,
+  REST,
+  Routes,
 } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -60,6 +62,29 @@ const client = new Client({
   ],
 });
 
+// Register slash command
+const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+
+(async () => {
+  try {
+    console.log("Registering slash commands...");
+
+    await rest.put(Routes.applicationCommands(client.user?.id), {
+      body: [
+        {
+          name: "info",
+          description:
+            "Menampilkan informasi tentang bot dan cara penggunaannya",
+        },
+      ],
+    });
+
+    console.log("Slash commands registered successfully.");
+  } catch (error) {
+    console.error("Error registering slash commands:", error);
+  }
+})();
+
 function processSuccessfulPayment(userId, channelId, amount, orderId) {
   // Update user balance
   const newBalance = updateUserBalance(userId, amount);
@@ -100,20 +125,16 @@ client.once("ready", () => {
   console.log(`Top-Up Bot ON 💰 ${client.user.tag}`);
 });
 
-// Handle message commands and interactions
-client.on("messageCreate", async (message) => {
-  if (message.author.bot || !message.guild) return;
-
-  const prefix = "?";
-  const args = message.content.slice(prefix.length).trim().split(/ +/);
-  const command = args.shift()?.toLowerCase();
-
-  // Kirim UI tombol jika pesan hanya berisi prefix
-  if (message.content === prefix) {
+// Handle slash command
+client.on("interactionCreate", async (interaction) => {
+  if (interaction.isCommand() && interaction.commandName === "info") {
     const embed = new EmbedBuilder()
       .setTitle("💰 Selamat datang di Bot Top Up!")
       .setDescription(
-        "Gunakan tombol di bawah ini untuk top up atau cek saldo."
+        "Gunakan tombol di bawah ini untuk top up atau cek saldo.\n\n" +
+          "Anda juga dapat menggunakan perintah berikut:\n" +
+          "• `?topup [jumlah]` - Untuk top up saldo.\n" +
+          "• `?saldo` - Untuk melihat saldo Anda."
       )
       .setColor("Blue");
 
@@ -128,65 +149,11 @@ client.on("messageCreate", async (message) => {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    return message.reply({ embeds: [embed], components: [buttons] });
+    return await interaction.reply({ embeds: [embed], components: [buttons] });
   }
 
-  // Handle perintah dengan prefix
-  if (message.content.startsWith(prefix)) {
-    if (command === "topup") {
-      const amount = parseInt(args[0]);
-      if (!amount || isNaN(amount) || amount <= 0) {
-        return message.reply(
-          "❌ Masukkan jumlah top up yang valid! Contoh: `?topup 50000`"
-        );
-      }
-
-      if (amount < 10000) {
-        return message.reply("❌ Minimal top up Rp 10.000");
-      }
-
-      // Tambahkan saldo ke pengguna
-      const newBalance = await updateUserBalance(message.author.id, amount);
-
-      // Kirim konfirmasi ke pengguna
-      const embed = new EmbedBuilder()
-        .setTitle("💰 Top Up Berhasil!")
-        .setDescription(
-          `<@${
-            message.author.id
-          }> berhasil top up sebesar Rp ${amount.toLocaleString("id-ID")}`
-        )
-        .addFields({
-          name: "Saldo Sekarang",
-          value: `Rp ${newBalance.toLocaleString("id-ID")}`,
-        })
-        .setColor("Green")
-        .setTimestamp();
-
-      return message.reply({ embeds: [embed] });
-    }
-
-    if (command === "saldo") {
-      const balance = getUserBalance(message.author.id);
-      const embed = new EmbedBuilder()
-        .setTitle("💰 Informasi Saldo")
-        .setDescription(`<@${message.author.id}>, saldo kamu saat ini adalah:`)
-        .addFields({
-          name: "Saldo",
-          value: `Rp ${balance.toLocaleString("id-ID")}`,
-        })
-        .setColor("Blue")
-        .setTimestamp();
-
-      return message.reply({ embeds: [embed] });
-    }
-  }
-});
-
-client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
     if (interaction.customId === "topup") {
-      // Buat modal untuk input jumlah top up
       const modal = new ModalBuilder()
         .setCustomId("topup_modal")
         .setTitle("Top Up Saldo");
@@ -239,10 +206,8 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
-      // Tambahkan saldo ke pengguna
       const newBalance = await updateUserBalance(interaction.user.id, amount);
 
-      // Kirim konfirmasi ke pengguna
       const embed = new EmbedBuilder()
         .setTitle("💰 Top Up Berhasil!")
         .setDescription(
@@ -258,6 +223,86 @@ client.on("interactionCreate", async (interaction) => {
         .setTimestamp();
 
       return await interaction.reply({ embeds: [embed] });
+    }
+  }
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  const prefix = "?";
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift()?.toLowerCase();
+
+  // Kirim UI tombol jika pesan hanya berisi prefix
+  if (message.content === prefix) {
+    const embed = new EmbedBuilder()
+      .setTitle("💰 Selamat datang di Bot Top Up!")
+      .setDescription(
+        "Gunakan tombol di bawah ini untuk top up atau cek saldo."
+      )
+      .setColor("Blue");
+
+    const buttons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("topup")
+        .setLabel("Top Up")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("saldo")
+        .setLabel("Cek Saldo")
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return message.reply({ embeds: [embed], components: [buttons] });
+  }
+
+  // Handle perintah dengan prefix
+  if (message.content.startsWith(prefix)) {
+    if (command === "topup") {
+      const amount = parseInt(args[0]);
+      if (!amount || isNaN(amount) || amount <= 0) {
+        return message.reply(
+          "❌ Masukkan jumlah top up yang valid! Contoh: `?topup 50000`"
+        );
+      }
+
+      if (amount < 10000) {
+        return message.reply("❌ Minimal top up Rp 10.000");
+      }
+
+      const newBalance = await updateUserBalance(message.author.id, amount);
+
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Top Up Berhasil!")
+        .setDescription(
+          `<@${
+            message.author.id
+          }> berhasil top up sebesar Rp ${amount.toLocaleString("id-ID")}`
+        )
+        .addFields({
+          name: "Saldo Sekarang",
+          value: `Rp ${newBalance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Green")
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
+    }
+
+    if (command === "saldo") {
+      const balance = getUserBalance(message.author.id);
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Informasi Saldo")
+        .setDescription(`<@${message.author.id}>, saldo kamu saat ini adalah:`)
+        .addFields({
+          name: "Saldo",
+          value: `Rp ${balance.toLocaleString("id-ID")}`,
+        })
+        .setColor("Blue")
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
     }
   }
 });
