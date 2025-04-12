@@ -65,7 +65,7 @@ client.on("messageCreate", async (message) => {
   // Handle ?info command
   if (command === "info") {
     const embed = new EmbedBuilder()
-      .setTitle(" APA KONTOL")
+      .setTitle("APA KONTOL")
       .setDescription(
         "Pake tomboil aja nyet kalo lu males pake prefix ya konntol.\n\n" +
           "ini prefixnya kontol:\n" +
