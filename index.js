@@ -10,6 +10,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   InteractionType,
+  MessageFlags,
 } = require("discord.js");
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -125,31 +126,40 @@ app.post("/midtrans-callback", (req, res) => {
     });
 });
 
-function processSuccessfulPayment(userId, channelId, amount, orderId) {
+async function processSuccessfulPayment(userId, channelId, amount, orderId) {
   // Update user balance
-  const newBalance = updateUserBalance(userId, amount);
+  const newBalance = await updateUserBalance(userId, amount); // Ensure updateUserBalance is awaited
 
-  // Notify user of successful payment
-  const channel = client.channels.cache.get(channelId);
-  if (channel) {
-    const embed = new EmbedBuilder()
-      .setTitle("💰 Top Up Berhasil!")
-      .setDescription(
-        `<@${userId}> berhasil top up sebesar Rp ${amount.toLocaleString(
-          "id-ID"
-        )}`
-      )
-      .addFields(
-        { name: "Order ID", value: orderId },
-        {
-          name: "Saldo Sekarang",
-          value: `Rp ${newBalance.toLocaleString("id-ID")}`,
-        }
-      )
-      .setColor("Green")
-      .setTimestamp();
+  // Notify user of successful payment via DM
+  try {
+    const user = await client.users.fetch(userId);
+    if (user) {
+      const embed = new EmbedBuilder()
+        .setTitle("💰 Top Up Berhasil!")
+        .setDescription(
+          `Kamu berhasil top up sebesar Rp ${amount.toLocaleString(
+            "id-ID"
+          )}`
+        )
+        .addFields(
+          { name: "Order ID", value: orderId },
+          {
+            name: "Saldo Sekarang",
+            value: `Rp ${newBalance.toLocaleString("id-ID")}`, // newBalance should be the direct result now
+          }
+        )
+        .setColor("Green")
+        .setTimestamp();
 
-    channel.send({ embeds: [embed] });
+      await user.send({ embeds: [embed] });
+    }
+  } catch (error) {
+    console.error(`Failed to send DM to user ${userId}:`, error);
+    // Optionally, send a message to the original channel if DM fails
+    const channel = client.channels.cache.get(channelId);
+    if (channel) {
+      channel.send(`<@${userId}>, top up kamu berhasil, tetapi aku tidak bisa mengirim DM. Saldo kamu telah diperbarui.`);
+    }
   }
 
   // Remove from pending transactions
@@ -225,8 +235,15 @@ client.on("messageCreate", async (message) => {
     }
 
     // Create order ID
-    const orderId = `TOPUP-${message.author.id}-${Date.now()}`;
+    const orderId = `TEST-TOPUP-${message.author.id}-${Date.now()}`;
 
+    // --- TEMPORARY: Bypass Midtrans for testing DM confirmation ---
+    message.reply("⚙️ **Test Mode:** Memproses top up dummy. Konfirmasi akan dikirim via DM.");
+    await processSuccessfulPayment(message.author.id, message.channel.id, amount, orderId);
+    return; 
+    // --- END TEMPORARY --- 
+
+    /* // Original Midtrans transaction code - uncomment to restore
     // Create transaction parameter
     const parameter = {
       transaction_details: {
@@ -264,8 +281,8 @@ client.on("messageCreate", async (message) => {
         )
         .addFields(
           { name: "Order ID", value: orderId },
-          {
-            name: "Link Pembayaran",
+          { 
+            name: "Link Pembayaran", 
             value: `[Klik disini untuk membayar](${redirectUrl})`,
           }
         )
@@ -280,6 +297,7 @@ client.on("messageCreate", async (message) => {
         "❌ Terjadi kesalahan saat membuat transaksi. Silakan coba lagi nanti."
       );
     }
+    */
   }
 
   // Handle balance check command
@@ -334,7 +352,7 @@ client.on("interactionCreate", async (interaction) => {
         )
         .setColor("Blue");
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
   } else if (interaction.type === InteractionType.ModalSubmit) {
     if (interaction.customId === "topup_modal") {
@@ -344,20 +362,27 @@ client.on("interactionCreate", async (interaction) => {
       if (isNaN(amount) || amount <= 0) {
         return interaction.reply({
           content: "❌ Jumlah top up tidak valid!",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       if (amount < 10000) {
         return interaction.reply({
           content: "❌ Minimal top up Rp 10.000",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       // Create order ID
-      const orderId = `TOPUP-${interaction.user.id}-${Date.now()}`;
+      const orderId = `TEST-TOPUP-MODAL-${interaction.user.id}-${Date.now()}`;
 
+      // --- TEMPORARY: Bypass Midtrans for testing DM confirmation ---
+      await interaction.reply({ content: "⚙️ **Test Mode:** Memproses top up dummy. Konfirmasi akan dikirim via DM.", flags: MessageFlags.Ephemeral });
+      await processSuccessfulPayment(interaction.user.id, interaction.channel.id, amount, orderId);
+      return;
+      // --- END TEMPORARY ---
+
+      /* // Original Midtrans transaction code - uncomment to restore
       // Create transaction parameter
       const parameter = {
         transaction_details: {
@@ -412,9 +437,10 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply({
           content:
             "❌ Terjadi kesalahan saat membuat transaksi. Silakan coba lagi nanti.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
+      */
     }
   }
 });
